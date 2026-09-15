@@ -1,190 +1,127 @@
-# 💵 Indian Currency Live Detector
+💵 Indian Currency Live Detector
+Real-time Indian currency note detection and classification — straight from your webcam, with voice announcements and running-total tracking.
 
-> Real-time Indian currency note detection and classification — straight from your webcam, with OCR verification and voice announcements.
+Python PyTorch Ultralytics YOLO OpenCV License
 
-[![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://www.python.org/)
-[![OpenCV](https://img.shields.io/badge/OpenCV-Contrib-green.svg)](https://opencv.org/)
-[![scikit-learn](https://img.shields.io/badge/scikit--learn-RandomForest-orange.svg)](https://scikit-learn.org/)
-[![Tesseract OCR](https://img.shields.io/badge/OCR-Tesseract-yellow.svg)](https://github.com/tesseract-ocr/tesseract)
-[![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](#license)
-
----
-
-## ✨ What is this?
-
+✨ What is this?
 Point your webcam at an Indian currency note, and this project will:
 
-1. 🔍 **Detect** the note in the live video feed (even while you're holding it)
-2. 🧠 **Classify** the denomination using a trained Random Forest model built on SIFT + Bag-of-Visual-Words features
-3. 🔤 **Verify** the classification by reading the printed number directly off the note with OCR
-4. 🗳️ **Smooth** results over multiple frames with majority voting, so a single bad-lighting frame doesn't throw off the answer
-5. 🔊 **Announce** the detected denomination out loud
+🔍 Detect the note in the live video feed — even angled, partially covered by fingers, or against a cluttered background
+🧠 Classify the denomination using a custom-trained YOLOv8 object detector
+🗳️ Smooth results over multiple frames, so a single blurry/noisy frame doesn't trigger a wrong announcement
+🔊 Announce the detected denomination out loud (offline text-to-speech)
+💰 Keep a running total of everything shown so far, and read it back on request
+🎙️ Respond to spoken commands ("total", "reset") using fully offline speech recognition
+All running live, with either an on-screen video window or a fully headless (no display) mode.
 
-All running live, in a single OpenCV window.
-
----
-
-## 🎯 Features
-
-| Feature | Description |
-|---|---|
-| 🎥 **Live detection** | Background-thread detection pipeline keeps the video feed smooth while classification runs asynchronously |
-| 🧩 **Smart note isolation** | Canny-edge + contour shape/solidity filtering to isolate the note from cluttered backgrounds |
-| 🙅 **False-positive rejection** | Skin-tone filtering + a trained "Background" class so faces/hands/tables aren't misread as currency |
-| 🔤 **OCR cross-check** | Tesseract OCR reads the printed denomination number to catch cases where color/lighting confuses the classifier |
-| 🗳️ **Temporal voting** | Rolling majority vote across recent frames for a stable, confident final answer |
-| 🔊 **Voice announcements** | Speaks the detected denomination once per note using offline text-to-speech |
-| 💰 **Running total** | Tracks and displays the total value of notes currently in view |
-
----
-
-## 🧠 How it works
-
-```
+🎯 Features
+Feature	Description
+🎥 Live detection	YOLOv8 object detector trained on real-world note photos (varied backgrounds, angles, partial occlusion)
+🙅 False-positive rejection	Trained with hard-negative "background only" images so empty scenes don't trigger a false detection
+🗳️ Stability filtering	Requires a detection to hold steady across several frames before announcing — filters out one-off misreads
+🔊 Voice announcements	Speaks the detected denomination via offline TTS; low-confidence detections are announced tentatively ("maybe X rupees, not sure")
+💰 Running total	Tracks the total value of notes seen so far
+🎙️ Voice commands	Say "total" to hear the running total, or "reset" to clear it — powered by offline Vosk speech recognition
+⌨️ Keyboard fallback	T / R keys do the same thing as the voice commands, for when mic conditions are noisy
+🖥️ Headless mode	Run with no video window at all — just camera + voice — for embedded/no-screen setups (e.g. a wearable device)
+🧠 How it works
 Webcam Frame
      │
      ▼
-Downscale + Canny Edge Detection
+YOLOv8 Object Detection (denomination + bounding box, single pass)
      │
      ▼
-Contour Filtering (area, aspect ratio, solidity)
+Confidence Threshold Filter
      │
      ▼
-Skin-Tone Rejection ──► reject if hand/face
+Stability Check (same class seen across several consecutive frames)
      │
      ▼
-Feature Extraction (Hu Moments + Haralick + Color Histogram + SIFT-BoVW)
+Speak Result (tentative if confidence is borderline) + Add to Running Total
      │
      ▼
-Random Forest Classification ──► "Background"? ──► ignore, reset voting
-     │
-     ▼
-OCR Verification (Tesseract) ──► overrides classifier if a confident digit match is found
-     │
-     ▼
-Majority Vote (last N frames)
-     │
-     ▼
-Draw Box + Label + Speak Result
-```
-
----
-
-## 🛠️ Tech Stack
-
-- **OpenCV (contrib)** — video capture, Canny edge detection, contour analysis, SIFT, Bag-of-Visual-Words
-- **scikit-learn** — Random Forest classifier, `RandomizedSearchCV` for hyperparameter tuning
-- **mahotas** — Haralick texture features
-- **Tesseract OCR (pytesseract)** — printed denomination verification
-- **pyttsx3** — offline text-to-speech
-- **NumPy** — feature vector handling
-
----
-
-## 📁 Project Structure
-
-```
+Voice Command Listener (background thread) ──► "total" / "reset" ──► Speak Running Total
+🛠️ Tech Stack
+Ultralytics YOLOv8 — real-time object detection & classification, trained on a custom dataset
+PyTorch (CUDA) — GPU-accelerated training and inference
+OpenCV — video capture and (optional) on-screen display
+pyttsx3 — offline text-to-speech
+Vosk — fully offline speech recognition for voice commands
+PyAudio — microphone input stream
+📁 Project Structure
 indian-currency-live-detector/
-├── data/                      # Training images, organized by denomination folder (not committed — see .gitignore)
+├── data/                          # Training images, organized by denomination folder (not committed — see .gitignore)
 │   ├── 10/  20/  50/  100/  200/  500/  Background/
-├── model/                     # Trained model + BoVW codebook + feature arrays
-│   ├── rfclassifier_600.sav
-│   ├── bovw_codebook_600.pickle
-│   ├── data_600.npy
-│   └── label_600.npy
-├── bovw.py                    # Builds the SIFT Bag-of-Visual-Words vocabulary + feature dataset
-├── train.py                   # Trains the Random Forest classifier
-├── hyper_train.py             # Randomized hyperparameter search + retrains the best model
-├── live_camera.py             # Main live webcam detection + OCR + voice app
-├── predict.py                 # Single-image prediction utility
-├── currency.py                # Shared feature-extraction helpers
+├── yolo_data/                      # YOLO-format dataset (images + labels, train/val split) — not committed
+├── runs/                            # Training runs + trained weights (not committed)
+│   └── detect/train-*/weights/best.pt
+├── live_camera_yolo.py             # Main live webcam app — detection, voice, running total (with video window)
+├── live_camera_headless.py         # Same as above, but with no display window (for no-screen setups)
+├── auto_label.py                   # Auto-generates approximate YOLO bounding-box labels from denomination folders
+├── clean_unlabeled.py              # Keeps only successfully auto-labeled images for training
+├── add_negatives.py                # Adds background-only images as hard negatives (reduces false positives)
+├── make_val_split.py               # Splits labeled data into train/validation sets
+├── data.yaml                       # YOLO dataset config (class names + paths)
 ├── requirements.txt
 └── README.md
-```
-
----
-
-## 🚀 Getting Started
-
-### 1. Clone the repo
-
-```bash
+🚀 Getting Started
+1. Clone the repo
 git clone https://github.com/Sujoy2005/indian-currency-live-detector.git
 cd indian-currency-live-detector
-```
-
-### 2. Set up a virtual environment (Python 3.11 recommended)
-
-```bash
+2. Set up a virtual environment (Python 3.11 recommended)
 py -3.11 -m venv venv
 venv\Scripts\activate        # Windows
-```
+3. Install dependencies
+pip install ultralytics opencv-python pyttsx3
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121   # for NVIDIA GPU training/inference
 
-### 3. Install dependencies
+# Optional — for voice commands ("total" / "reset"):
+pip install vosk pyaudio
+4. (Optional) Enable voice commands
+Download a Vosk speech model (fully offline after this one-time download):
 
-```bash
-pip install numpy opencv-contrib-python mahotas scikit-learn joblib pytesseract pyttsx3
-```
+Small/fast model: vosk-model-small-en-us-0.15
+More accurate model (recommended if your mic picks up background noise): vosk-model-en-us-0.22
+Extract it into the project root, and make sure VOSK_MODEL_PATH in live_camera_yolo.py matches the folder name. If the model folder isn't found, voice commands are simply disabled — everything else still works, and T / R keyboard shortcuts always work as a fallback.
 
-### 4. Install Tesseract OCR (required for OCR verification)
+5. Train the model (if training from scratch)
+# 1. Auto-label your per-denomination image folders (data/10, data/20, ...)
+python auto_label.py
 
-Download and install from [UB-Mannheim's Tesseract build](https://github.com/UB-Mannheim/tesseract/wiki), then confirm the path in `live_camera.py` matches your install location:
+# 2. Keep only successfully auto-labeled images
+python clean_unlabeled.py
 
-```python
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-```
+# 3. Add background-only images as hard negatives (reduces false positives)
+python add_negatives.py
 
-### 5. Build the model (if training from scratch)
+# 4. Split into train/validation sets
+python make_val_split.py
 
-```bash
-python bovw.py data
-python train.py model/rfclassifier_600.sav
-```
+# 5. Train (GPU strongly recommended — device=0 uses your first CUDA GPU)
+yolo detect train data=data.yaml model=yolov8n.pt epochs=50 imgsz=640 device=0
+After training, update MODEL_PATH in live_camera_yolo.py (and live_camera_headless.py) to point at the new runs/detect/train-*/weights/best.pt.
 
-Optional — search for better hyperparameters:
+6. Run it!
+python live_camera_yolo.py
+Hold a note in front of your webcam. Press q to quit, T to hear the running total, R to reset it — or just say "total" / "reset" out loud if voice commands are set up.
 
-```bash
-python hyper_train.py
-```
+For a no-display setup:
 
-### 6. Run it!
+python live_camera_headless.py
+Stop it with Ctrl+C in the terminal.
 
-```bash
-python live_camera.py
-```
-
-Hold a note in front of your webcam and watch it get detected, classified, verified, and announced. Press **`q`** to quit.
-
----
-
-## 💡 Tips for Best Accuracy
-
-- Use a **plain, dark, contrasting background** (a black cloth or mat works great)
-- Keep the note **flat** and **well-lit** — avoid shadows and glare
-- Hold the note **close enough** that the printed number is crisp and readable
-- Keep it steady for a second or two to let the majority vote stabilize
-
----
-
-## 🗺️ Roadmap Ideas
-
-- [ ] Swap classical CV detection for a lightweight trained object detector for background-agnostic detection
-- [ ] Expand dataset with more lighting/angle/wear diversity per denomination
-- [ ] Add a simple GUI/dashboard for scan history and totals
-- [ ] Package as a standalone executable
-
----
-
-## 🤝 Contributing
-
+💡 Tips for Best Accuracy
+Hold the note reasonably steady for a second so the stability filter can confirm it
+Good, even lighting helps — avoid heavy glare or deep shadows across the note
+For voice commands, a headset/earphone mic works far better than a laptop's built-in mic, especially in noisy rooms
+If a denomination is consistently misread, add more real-world training photos for that denomination to data/<amount>/ and retrain
+🗺️ Roadmap Ideas
+ Expand training data further for weaker classes (denominations with fewer real-world photos)
+ Multi-language voice announcements (e.g. Hindi)
+ Position guidance ("move closer" / "move back") for a screen-free experience
+ Package as a standalone executable
+🤝 Contributing
 Issues and pull requests are welcome! If you add more training data or improve detection accuracy, feel free to open a PR.
 
----
-
-## 📜 License
-
-This project is open source under the [MIT License](LICENSE).
-
----
-
-<p align="center">Made with 🧠 + ☕ by <a href="https://github.com/Sujoy2005">Sujoy</a></p>
+📜 License
+This project is open source under the MIT License.
