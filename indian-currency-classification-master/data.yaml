@@ -1,0 +1,5 @@
+﻿path: yolo_data
+train: images/train
+val: images/val
+nc: 6
+names: ['10', '20', '50', '100', '200', '500']

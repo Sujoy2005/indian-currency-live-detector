@@ -1,0 +1,7 @@
+numpy
+opencv-contrib-python==4.10.0.84
+mahotas
+imutils
+scikit-learn
+matplotlib
+joblib
